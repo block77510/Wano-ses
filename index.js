@@ -4,8 +4,8 @@ http.createServer((req, res) => {
     res.end();
 }).listen(process.env.PORT || 10000);
 
-const { Client, GatewayIntentBits, Message, EmbedBuilder } = require('discord.js');
-const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus } = require('@discordjs/voice');
+const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
+const { joinVoiceChannel, createAudioPlayer, createAudioResource } = require('@discordjs/voice');
 const play = require('play-dl');
 
 const client = new Client({
@@ -18,12 +18,11 @@ const client = new Client({
 });
 
 const TOKEN = process.env.TOKEN; 
-let SES_KANAL_ID = "1522909681658630215"; // Varsayılan başlangıç ses kanalı
+let sesKanalId = "1522909681658630215"; 
 
 const player = createAudioPlayer();
-let su AnkiBaglanti = null;
+let suAnkiBaglanti = null;
 
-// Sese Bağlanma Motoru
 function seseBaglan(kanalId, guild) {
     const kanal = guild.channels.cache.get(kanalId);
     if (!kanal) return null;
@@ -33,7 +32,7 @@ function seseBaglan(kanalId, guild) {
         guildId: guild.id,
         adapterCreator: guild.voiceAdapterCreator,
         selfMute: false,
-        selfDeaf: false // Müzik çalacağı için sağırlaştırmayı kapattık
+        selfDeaf: false
     });
 
     suAnkiBaglanti.subscribe(player);
@@ -44,14 +43,12 @@ client.once('ready', () => {
     console.log(`🤖 Müzik Botu Aktif: ${client.user.tag}`);
     client.user.setActivity('https://discord.gg/HwsAPbqKJa', { type: 0 }); 
 
-    // Bot ilk açıldığında varsayılan kanala girsin
     const ilkGuild = client.guilds.cache.first();
     if (ilkGuild) {
-        seseBaglan(SES_KANAL_ID, ilkGuild);
+        seseBaglan(sesKanalId, ilkGuild);
     }
 });
 
-// Komut İşleyici Motoru
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
 
@@ -61,31 +58,29 @@ client.on('messageCreate', async (message) => {
     // !gel <kanal-id> Komutu
     if (komut === '!gel') {
         const yeniKanalId = args[1];
-        if (!yeniKanalId) return message.reply('⚠️ Lütfen geçiş yapmak istediğim ses kanalının ID\'sini yazın! Örn: `!gel 1522909...`');
+        if (!yeniKanalId) return message.reply('⚠️ Lütfen geçiş yapmak istediğim ses kanalının ID\'sini yazın!');
 
-        const baglanildi Mi = seseBaglan(yeniKanalId, message.guild);
-        if (baglanildiMi) {
-            SES_KANAL_ID = yeniKanalId; // Yeni kanalı hafızaya al
-            return message.reply(`✅ Başarıyla yeni ses kanalına geçiş yaptım: **${baglanildiMi.name}**`);
+        const kontrolKanal = seseBaglan(yeniKanalId, message.guild);
+        if (kontrolKanal) {
+            sesKanalId = yeniKanalId; 
+            return message.reply(`✅ Başarıyla yeni ses kanalına geçiş yaptım: **${kontrolKanal.name}**`);
         } else {
             return message.reply('❌ Belirttiğiniz ID\'ye sahip bir ses kanalı bulunamadı!');
         }
     }
 
-    // !play <link/şarkı adı> Komutu
+    // !play <şarkı adı veya link> Komutu
     if (komut === '!play') {
         const aramaSorgusu = args.slice(1).join(' ');
-        if (!aramaSorgusu) return message.reply('⚠️ Lütfen çalmak istediğiniz şarkının adını veya SoundCloud/YouTube linkini girin!');
+        if (!aramaSorgusu) return message.reply('⚠️ Lütfen çalmak istediğiniz şarkının adını veya linkini girin!');
 
-        // Eğer bot o sırada seste değilse sese sok
         if (!suAnkiBaglanti) {
-            seseBaglan(SES_KANAL_ID, message.guild);
+            seseBaglan(sesKanalId, message.guild);
         }
 
         const bilgiMesaji = await message.reply('🔍 Şarkı aranıyor ve hazırlanıyor...');
 
         try {
-            // Şarkıyı play-dl kütüphanesi ile aratıp açıyoruz
             let aramaSonucu = await play.search(aramaSorgusu, { limit: 1 });
             if (!aramaSonucu || aramaSonucu.length === 0) return bilgiMesaji.edit('❌ Şarkı bulunamadı!');
 
@@ -103,24 +98,23 @@ client.on('messageCreate', async (message) => {
             await bilgiMesaji.edit({ content: null, embeds: [embed] });
         } catch (err) {
             console.error(err);
-            await bilgiMesaji.edit('❌ Şarkı oynatılırken bir hata oluştu! (Discord telif engeline takılmış olabilir, başka şarkı veya SoundCloud linki deneyin)');
+            await bilgiMesaji.edit('❌ Şarkı oynatılırken bir hata oluştu!');
         }
     }
 
-    // !stop Komutu (Şarkıyı durdurmak istersen ekstra ekledim)
+    // !stop Komutu
     if (komut === '!stop' || komut === '!durdur') {
         player.stop();
         return message.reply('🛑 Müzik durduruldu.');
     }
 });
 
-// Bot sesten düşerse geri bağlanma motoru
 client.on('voiceStateUpdate', (oldState, newState) => {
     if (oldState.member && oldState.member.id === client.user.id && !newState.channelId) {
         suAnkiBaglanti = null;
         setTimeout(() => {
             const guild = client.guilds.cache.get(oldState.guild.id);
-            if (guild) seseBaglan(SES_KANAL_ID, guild);
+            if (guild) seseBaglan(sesKanalId, guild);
         }, 5000);
     }
 });
