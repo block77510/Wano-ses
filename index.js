@@ -1,8 +1,9 @@
+// Ses Botu Render Uyumlu Port
 const http = require('http');
 http.createServer((req, res) => {
     res.write("Ses Botu 7/24 Kesintisiz Aktif!");
     res.end();
-}).listen(process.env.PORT || 3000);
+}).listen(process.env.PORT || 10000); // Burayı da 10000 yapıyoruz
 
 const { Client, GatewayIntentBits } = require('discord.js');
 const { joinVoiceChannel } = require('@discordjs/voice');
