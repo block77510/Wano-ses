@@ -18,7 +18,7 @@ const TOKEN = process.env.TOKEN;
 const SES_KANAL_ID = "1522909681658630215"; 
 
 function seseBaglan() {
-    const kanal = client.channels.cache.get(SES_KANAL_ID);
+    const kanal = client.channels.cache.get();
     if (!kanal) return console.log("⚠️ Belirtilen ses kanalı bulunamadı!");
 
     try {
