@@ -15,7 +15,7 @@ const client = new Client({
     ]
 });
 
-const TOKEN = process.env.TOKEN; 
+const TOKEN = process.env.TOKEN;
 const SES_KANAL_ID = "1522909681658630215"; 
 
 function seseBaglan() {
