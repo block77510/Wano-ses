@@ -1,122 +1,78 @@
-const http = require('http');
-http.createServer((req, res) => {
-    res.write("Wano Muzik ve Ses Botu Aktif!");
-    res.end();
-}).listen(process.env.PORT || 10000);
+const { Client, GatewayIntentBits } = require('discord.js');
 
-const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
-const { joinVoiceChannel, createAudioPlayer, createAudioResource } = require('@discordjs/voice');
-const play = require('play-dl');
-
+// Botun ihtiyaç duyduğu erişim izinleri (Intents)
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildVoiceStates
+        GatewayIntentBits.GuildMembers
     ]
 });
 
-const TOKEN = process.env.TOKEN; 
-let sesKanalId = "1522909681658630215"; 
+// Botun öneki (Prefix)
+const prefix = ".";
 
-const player = createAudioPlayer();
-let suAnkiBaglanti = null;
-
-function seseBaglan(kanalId, guild) {
-    const kanal = guild.channels.cache.get(kanalId);
-    if (!kanal) return null;
-
-    suAnkiBaglanti = joinVoiceChannel({
-        channelId: kanal.id,
-        guildId: guild.id,
-        adapterCreator: guild.voiceAdapterCreator,
-        selfMute: false,
-        selfDeaf: false
-    });
-
-    suAnkiBaglanti.subscribe(player);
-    return kanal;
-}
+// İstediğin ID'leri buraya sabitledik
+const YETKILI_ROL_ID = "1404819891319476255";  // Bu komutu kullanabilecek rol
+const VERILECEK_ROL_ID = "1519337018751193231"; // Kayıt olunca verilecek rol
+const ALINACAK_ROL_ID = "1392602451567186001";  // Kayıt olunca alınacak rol (Kayıtsız rolü)
 
 client.once('ready', () => {
-    console.log(`🤖 Müzik Botu Aktif: ${client.user.tag}`);
-    client.user.setActivity('https://discord.gg/HwsAPbqKJa', { type: 0 }); 
-
-    const ilkGuild = client.guilds.cache.first();
-    if (ilkGuild) {
-        seseBaglan(sesKanalId, ilkGuild);
-    }
+    console.log(`${client.user.tag} olarak giriş yapıldı! Komutlar hazır.`);
 });
 
 client.on('messageCreate', async (message) => {
-    if (message.author.bot || !message.guild) return;
+    // Mesaj botun önekiyle başlamıyorsa veya mesajı yazan bir botsa işlemi iptal et
+    if (!message.content.startsWith(prefix) || message.author.bot) return;
 
-    const args = message.content.split(' ');
-    const komut = args[0].toLowerCase();
+    // Komut ve argümanları ayırıyoruz (.k ID İsim Yaş)
+    const args = message.content.slice(prefix.length).trim().split(/ +/);
+    const command = args.shift().toLowerCase();
 
-    // !gel <kanal-id> Komutu
-    if (komut === '!gel') {
-        const yeniKanalId = args[1];
-        if (!yeniKanalId) return message.reply('⚠️ Lütfen geçiş yapmak istediğim ses kanalının ID\'sini yazın!');
-
-        const kontrolKanal = seseBaglan(yeniKanalId, message.guild);
-        if (kontrolKanal) {
-            sesKanalId = yeniKanalId; 
-            return message.reply(`✅ Başarıyla yeni ses kanalına geçiş yaptım: **${kontrolKanal.name}**`);
-        } else {
-            return message.reply('❌ Belirttiğiniz ID\'ye sahip bir ses kanalı bulunamadı!');
-        }
-    }
-
-    // !play <şarkı adı veya link> Komutu
-    if (komut === '!play') {
-        const aramaSorgusu = args.slice(1).join(' ');
-        if (!aramaSorgusu) return message.reply('⚠️ Lütfen çalmak istediğiniz şarkının adını veya linkini girin!');
-
-        if (!suAnkiBaglanti) {
-            seseBaglan(sesKanalId, message.guild);
+    if (command === 'k') {
+        // 1. Yetki Kontrolü: Komutu kullanan kişide yetkili rolü var mı?
+        if (!message.member.roles.cache.has(YETKILI_ROL_ID)) {
+            return message.reply("Bu komutu kullanmak için gerekli yetkiye sahip değilsin!");
         }
 
-        const bilgiMesaji = await message.reply('🔍 Şarkı aranıyor ve hazırlanıyor...');
+        // Kullanımdan gelen argümanları alıyoruz
+        const targetId = args[0]; // Kullanıcı ID'si
+        const name = args[1];     // İsim
+        const age = args[2];      // Yaş
+
+        // Eksik argüman kontrolü
+        if (!targetId || !name || !age) {
+            return message.reply(`Hatalı kullanım! Doğru format: \`${prefix}k <Kullanıcı-ID> <İsim> <Yaş>\`\nÖrnek: \`${prefix}k 1234567890 Ahmet 18\``);
+        }
 
         try {
-            let aramaSonucu = await play.search(aramaSorgusu, { limit: 1 });
-            if (!aramaSonucu || aramaSonucu.length === 0) return bilgiMesaji.edit('❌ Şarkı bulunamadı!');
-
-            let stream = await play.stream(aramaSonucu[0].url);
-            let resource = createAudioResource(stream.stream, { inputType: stream.type });
-
-            player.play(resource);
+            // Sunucudan hedef üyeyi ID ile buluyoruz
+            const member = await message.guild.members.fetch(targetId);
             
-            const embed = new EmbedBuilder()
-                .setTitle('🎶 Şu Anda Çalınıyor')
-                .setDescription(`[${aramaSonucu[0].title}](${aramaSonucu[0].url})`)
-                .setColor('#2ecc71')
-                .setFooter({ text: `İsteyen: ${message.author.username}` });
+            if (!member) {
+                return message.reply("Belirttiğin ID'ye sahip bir üye sunucuda bulunamadı.");
+            }
 
-            await bilgiMesaji.edit({ content: null, embeds: [embed] });
-        } catch (err) {
-            console.error(err);
-            await bilgiMesaji.edit('❌ Şarkı oynatılırken bir hata oluştu!');
+            // Yeni isim formatını ayarlıyoruz: "İsim | Yaş"
+            const newNickname = `${name} | ${age}`;
+
+            // 2. İsim Değiştirme
+            await member.setNickname(newNickname);
+
+            // 3. Rol Düzenleme (İstediğin rolü verme ve diğerini kaldırma)
+            await member.roles.add(VERILECEK_ROL_ID);
+            await member.roles.remove(ALINACAK_ROL_ID);
+
+            // Başarılı mesajı
+            return message.reply(`✅ **${member.user.tag}** kullanıcısı başarıyla kayıt edildi!\n• Yeni İsmi: \`${newNickname}\`\n• Verilen Rol: <@&${VERILECEK_ROL_ID}>\n• Alınan Rol: <@&${ALINACAK_ROL_ID}>`);
+
+        } catch (error) {
+            console.error(error);
+            return message.reply("Kayıt işlemi sırasında bir hata oluştu! Botun rolleri yönetme yetkisinin tam olduğundan ve hedef üyenin üstünde bir rolde olduğundan emin ol.");
         }
     }
-
-    // !stop Komutu
-    if (komut === '!stop' || komut === '!durdur') {
-        player.stop();
-        return message.reply('🛑 Müzik durduruldu.');
-    }
 });
 
-client.on('voiceStateUpdate', (oldState, newState) => {
-    if (oldState.member && oldState.member.id === client.user.id && !newState.channelId) {
-        suAnkiBaglanti = null;
-        setTimeout(() => {
-            const guild = client.guilds.cache.get(oldState.guild.id);
-            if (guild) seseBaglan(sesKanalId, guild);
-        }, 5000);
-    }
-});
-
-client.login(TOKEN);
+// Botunun tokenini buraya yapıştırmalısın
+client.login(process.env.DISCORD_TOKEN);
